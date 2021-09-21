@@ -29,13 +29,6 @@ public:
             _lru_tail = _lru_tail->prev;
         }
         _lru_head.reset();
-        //Clearing the list
-         //while( _lru_head ){
-        //        _lru_head = _lru_head->next;
-	//    }
-        //_lru_head.reset();
-            
-        //}
     }
     // Implements Afina::Storage interface
     bool Put(const std::string &key, const std::string &value) override;
