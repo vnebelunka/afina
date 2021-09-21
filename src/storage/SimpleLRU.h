@@ -7,7 +7,7 @@
 #include <string>
 
 #include <afina/Storage.h>
-
+#include <iostream>
 namespace Afina {
 namespace Backend {
 
@@ -17,13 +17,26 @@ namespace Backend {
  */
 class SimpleLRU : public Afina::Storage {
 public:
-    SimpleLRU(size_t max_size = 1024) : _max_size(max_size) {}
+    SimpleLRU(size_t max_size = 1024) : _max_size(max_size) {
+        _cur_size = 0;
+        _lru_tail = nullptr;
+    }
 
     ~SimpleLRU() {
         _lru_index.clear();
-        _lru_head.reset(); // TODO: Here is stack overflow
+        while (_lru_tail) {
+            _lru_tail->next.reset();
+            _lru_tail = _lru_tail->prev;
+        }
+        _lru_head.reset();
+        //Clearing the list
+         //while( _lru_head ){
+        //        _lru_head = _lru_head->next;
+	//    }
+        //_lru_head.reset();
+            
+        //}
     }
-
     // Implements Afina::Storage interface
     bool Put(const std::string &key, const std::string &value) override;
 
@@ -42,24 +55,30 @@ public:
 private:
     // LRU cache node
     using lru_node = struct lru_node {
-        std::string key;
+        const std::string key;
         std::string value;
-        std::unique_ptr<lru_node> prev;
+        lru_node *prev;
         std::unique_ptr<lru_node> next;
     };
 
     // Maximum number of bytes could be stored in this cache.
     // i.e all (keys+values) must be not greater than the _max_size
     std::size_t _max_size;
-
+    // Curent size of cache.
+    std::size_t _cur_size;
     // Main storage of lru_nodes, elements in this list ordered descending by "freshness": in the head
     // element that wasn't used for longest time.
     //
     // List owns all nodes
     std::unique_ptr<lru_node> _lru_head;
-
+    lru_node *_lru_tail;
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+
+    // cut tail until correct size
+    void tail_cut(const std::string &key, const std::string &value);
+    // move node into list head
+    void shift(lru_node *node) ;
 };
 
 } // namespace Backend
