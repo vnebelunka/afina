@@ -46,6 +46,9 @@ public:
     bool Get(const std::string &key, std::string &value) override;
 
 private:
+    /*
+     * States
+     */
     // LRU cache node
     using lru_node = struct lru_node {
         const std::string key;
@@ -64,14 +67,22 @@ private:
     //
     // List owns all nodes
     std::unique_ptr<lru_node> _lru_head;
+    // Last node in list
     lru_node *_lru_tail;
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
-
+private:
+    /*
+     * METHODS
+     */
     // cut tail until correct size
     void tail_cut(const std::string &key, const std::string &value);
     // move node into list head
     void shift(lru_node *node) ;
+    // creating new node in list's head
+    void new_node(const std::string &key, const std::string &value);
+    // updating node + shifts it in head.
+    void update(lru_node *node, const std::string &value);
 };
 
 } // namespace Backend

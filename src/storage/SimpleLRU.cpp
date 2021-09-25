@@ -1,36 +1,30 @@
 #include "SimpleLRU.h"
+#include <cassert>
 namespace Afina {
 namespace Backend {
 
 // See MapBasedGlobalLockImpl.h
     bool SimpleLRU::Put(const std::string &key, const std::string &value) {
-        // If there is a key: we will delete it, because we have to put node in head
+        if(key.size() + value.size() > _max_size){
+            return false;
+        }
         auto it = _lru_index.find(key);
         if(it != _lru_index.end()){
-            Set(key, value);
+            update(&it->second.get(), value);
         }
         // Clearing tail until correct size
         tail_cut(key, value);
         // new node
-        auto *rnode = new lru_node{key, value,{}, {}};
-        std::unique_ptr<lru_node> node(rnode);
-        _cur_size += value.size() + key.size();
-        _lru_index.emplace( std::cref(node->key), std::ref(*node));
-        if(_lru_head){
-            _lru_head->prev = rnode;
-            node->next = std::move(_lru_head);
-            _lru_head = std::move(node);
-        }
-        else{ // empty cache
-            _lru_head = std::move(node);
-            _lru_tail = rnode;
-        }
+        new_node(key, value);
         return true;
     }
 
 // See MapBasedGlobalLockImpl.h
     bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
         // Key check
+        if(key.size() + value.size() > _max_size){
+            return false;
+        }
         auto it = _lru_index.find(key);
         if(it != _lru_index.end()){
             return false;
@@ -38,35 +32,21 @@ namespace Backend {
         // Clearing tail until correct size
         tail_cut(key, value);
         // new node
-        auto *rnode = new lru_node{key, value,{}, {}};
-        std::unique_ptr<lru_node> node(rnode);
-        _cur_size += value.size() + key.size();
-        _lru_index.emplace( std::cref(node->key), std::ref(*node));
-        if(_lru_head){
-            _lru_head->prev = rnode;
-            node->next = std::move(_lru_head);
-            _lru_head = std::move(node);
-        }
-        else{
-            _lru_head = std::move(node);
-            _lru_tail = rnode;
-        }
+        new_node(key, value);
         return true;
     }
 
 
 // See MapBasedGlobalLockImpl.h
     bool SimpleLRU::Set(const std::string &key, const std::string &value) {
+        if(key.size() + value.size() > _max_size){
+            return false;
+        }
         auto it = _lru_index.find(key);
         if(it == _lru_index.end()){
             return false;
         }
-        lru_node *node = &it->second.get();
-        shift(node);
-        _cur_size -= node->value.size();
-        tail_cut(key, value);
-        node->value = value;
-        _cur_size += value.size();
+        update(&it->second.get(), value);
         return true;
     }
 
@@ -112,7 +92,7 @@ bool SimpleLRU::Get(const std::string &key, std::string &value) {
 }
 
 void  SimpleLRU::shift(lru_node *node) {
-    if(node == _lru_head.get()){ //tail
+    if(node == _lru_head.get()){ // head
         return;
     }
     if(_lru_tail->prev == _lru_head.get()){ //tail near head
@@ -123,7 +103,7 @@ void  SimpleLRU::shift(lru_node *node) {
         _lru_tail->prev = _lru_head.get();
         _lru_tail->next.release();
     }
-    else if(node != _lru_tail){ //cental
+    else if(node != _lru_tail){ //central
         // Connect neighbors
         std::unique_ptr<lru_node> temp;
         std::swap(temp, node->prev->next); // free node->prev->next
@@ -136,7 +116,7 @@ void  SimpleLRU::shift(lru_node *node) {
         // renew head
         std::swap(_lru_head, temp);
         _lru_head.reset(node);
-        // disconect head->prev, connect next
+        // disconnect head->prev, connect next
         _lru_head->prev = nullptr;
         _lru_head->next->prev = _lru_head.get();
         temp.release();
@@ -152,7 +132,6 @@ void  SimpleLRU::shift(lru_node *node) {
         _lru_tail = _lru_head->prev;
         _lru_head->prev = nullptr;
         _lru_tail->next.release();
-
     }
 }
 
@@ -163,6 +142,31 @@ void SimpleLRU::tail_cut(const std::string &key,const std::string &value){
         _lru_tail = _lru_tail->prev;
         _lru_tail->next.reset();
     }
+}
+
+void SimpleLRU::new_node(const std::string &key, const std::string &value){
+    auto *rnode = new lru_node{key, value,{}, {}};
+    std::unique_ptr<lru_node> node(rnode);
+    _cur_size += value.size() + key.size();
+    _lru_index.emplace( std::cref(node->key), std::ref(*node));
+    if(_lru_head){
+        _lru_head->prev = rnode;
+        node->next = std::move(_lru_head);
+        _lru_head = std::move(node);
+    }
+    else{
+        _lru_head = std::move(node);
+        _lru_tail = rnode;
+    }
+}
+
+void SimpleLRU::update(lru_node *node, const std::string &value){
+    shift(node);
+    _cur_size -= node->value.size() + node->key.size();
+    assert(node->key.size() + value.size() <= _max_size); // out node won't be deleted, 'cause its head now.
+    tail_cut(node->key, value);
+    node->value = value;
+    _cur_size += value.size() + node->key.size();
 }
 } // namespace Backend
 } // namespace Afina
