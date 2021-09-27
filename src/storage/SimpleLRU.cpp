@@ -11,6 +11,7 @@ namespace Backend {
         auto it = _lru_index.find(key);
         if(it != _lru_index.end()){
             update(&it->second.get(), value);
+            return true;
         }
         // Clearing tail until correct size
         tail_cut(key, value);
@@ -136,7 +137,7 @@ void  SimpleLRU::shift(lru_node *node) {
 }
 
 void SimpleLRU::tail_cut(const std::string &key,const std::string &value){
-    while(_cur_size + key.size() + value.size() > _max_size && _lru_head){
+    while(_cur_size > _max_size - (key.size() + value.size()) && _lru_head){
         _lru_index.erase(_lru_tail->key);
         _cur_size -= _lru_tail->key.size() + _lru_tail->value.size();
         _lru_tail = _lru_tail->prev;
