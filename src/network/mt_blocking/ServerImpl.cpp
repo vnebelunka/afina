@@ -54,6 +54,9 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
     server_addr.sin_addr.s_addr = INADDR_ANY; // Bind to any address
 
     _server_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    socket_set.insert(_server_socket);
+
     if (_server_socket == -1) {
         throw std::runtime_error("Failed to open socket");
     }
@@ -81,10 +84,10 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 // See Server.h
 void ServerImpl::Stop() {
     shutdown(_server_socket, SHUT_RDWR);
-    close(_server_socket);
     running.store(false);
     {
         std::unique_lock<std::mutex> lock(_lock_serv);
+        socket_set.erase(_server_socket);
         for(auto &socket : socket_set){
             shutdown(socket, SHUT_RD);
         }
@@ -99,7 +102,6 @@ void ServerImpl::Join() {
             sockets_closed.wait(lock);
         }
     }
-    assert(_thread.joinable());
     _thread.join();
 }
 
@@ -154,7 +156,7 @@ void ServerImpl::OnRun() {
                 client_thread.detach();
             }
             else{
-                _logger->warn("Server is too busy right now");
+                _logger->warn("To busy: {} sockets active. closing {} socket", socket_set.size(), client_socket);
                 close(client_socket);
             }
         }
@@ -254,7 +256,7 @@ void ServerImpl::Worker(int client_socket) {
         close(client_socket);
         socket_set.erase(client_socket);
         if(!running.load() && socket_set.empty()){
-            sockets_closed.notify_one();
+            sockets_closed.notify_all();
         }
     }
 }
