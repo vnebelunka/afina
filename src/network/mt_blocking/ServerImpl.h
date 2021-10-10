@@ -68,8 +68,6 @@ private:
     // num of max workers on server
     uint32_t _n_workers;
 
-    // Thread to run network on
-    std::thread _thread;
 };
 
 } // namespace MTblocking

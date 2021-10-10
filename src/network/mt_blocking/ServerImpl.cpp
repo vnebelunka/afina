@@ -78,16 +78,15 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
     }
 
     running.store(true);
-    _thread = std::thread(&ServerImpl::OnRun, this);
+    std::thread _thread = std::thread(&ServerImpl::OnRun, this);
+    _thread.detach();
 }
 
 // See Server.h
 void ServerImpl::Stop() {
-    shutdown(_server_socket, SHUT_RDWR);
     running.store(false);
     {
         std::unique_lock<std::mutex> lock(_lock_serv);
-        socket_set.erase(_server_socket);
         for(auto &socket : socket_set){
             shutdown(socket, SHUT_RD);
         }
@@ -102,7 +101,6 @@ void ServerImpl::Join() {
             sockets_closed.wait(lock);
         }
     }
-    _thread.join();
 }
 
 // See Server.h
@@ -163,14 +161,24 @@ void ServerImpl::OnRun() {
     }
 
     // Cleanup on exit...
+
+    {
+        std::unique_lock<std::mutex> lock(_lock_serv);
+        close(_server_socket);
+        socket_set.erase(_server_socket);
+        if(!running.load() && socket_set.empty()){
+            sockets_closed.notify_all();
+        }
+    }
+
     _logger->warn("Network stopped");
 }
+
 void ServerImpl::Worker(int client_socket) {
     std::size_t arg_remains;
     Protocol::Parser parser;
     std::string argument_for_command;
     std::unique_ptr<Execute::Command> command_to_execute;
-    //TODO: возможно стоит поддерживать поток для работы с клиентом постоянно, а не только на 1 команду.
     try {
         int readed_bytes = -1;
         char client_buffer[4096];
