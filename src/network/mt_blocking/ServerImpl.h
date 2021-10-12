@@ -5,6 +5,9 @@
 #include <thread>
 
 #include <afina/network/Server.h>
+#include <mutex>
+#include <unordered_set>
+#include <condition_variable>
 
 namespace spdlog {
 class logger;
@@ -38,6 +41,9 @@ protected:
      */
     void OnRun();
 
+    // Worker with client
+    void Worker(int client_socket);
+
 private:
     // Logger instance
     std::shared_ptr<spdlog::logger> _logger;
@@ -47,11 +53,21 @@ private:
     // bounds
     std::atomic<bool> running;
 
+    // lock for onRun
+    std::mutex _lock_serv;
+
+    // checks if all client sockets are closed
+    std::condition_variable sockets_closed;
+
     // Server socket to accept connections on
     int _server_socket;
 
-    // Thread to run network on
-    std::thread _thread;
+    //set of working sockets.
+    std::unordered_set<int> socket_set;
+
+    // num of max workers on server
+    uint32_t _n_workers;
+
 };
 
 } // namespace MTblocking
