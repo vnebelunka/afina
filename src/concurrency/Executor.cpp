@@ -28,7 +28,11 @@ namespace Concurrency {
                 job = executor->tasks.front();
                 executor->tasks.pop_front();
             }
+            try{
             job();
+            } catch(...){
+                throw std::runtime_error("job failed\n");
+            }
         }
     }
 

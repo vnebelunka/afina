@@ -48,11 +48,16 @@ class Executor {
      */
     void Stop(bool await = false){
         std::unique_lock<std::mutex> lock(mutex);
-        state = State::kStopping;
-        while(cur_threads != 0){
-            stopped_condition.wait(lock);
+        if(await) {
+            state = State::kStopping;
+            while (cur_threads != 0) {
+                stopped_condition.wait(lock);
+            }
+            state = State::kStopped;
+        } else {
+            tasks.clear();
+            state = State::kStopped;
         }
-        state = State::kStopped;
     }
 
     /**
@@ -71,7 +76,7 @@ class Executor {
             return false;
         }
 
-        if(working_threads == cur_threads && cur_threads < high_watermark){
+        if(tasks.size() >= cur_threads + 1 && cur_threads < high_watermark){
             std::thread([this] { return perform(this); }).detach();
             ++cur_threads;
         }
