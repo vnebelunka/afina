@@ -100,7 +100,9 @@ void Connection::DoRead() {
             if (readed_bytes == 0) {
                 _event.events &= ~EPOLLIN; //TODO возможно неправильно
             } else {
-                throw std::runtime_error(std::string(strerror(errno)));
+                if(errno != EWOULDBLOCK) {
+                    throw std::runtime_error(std::string(strerror(errno)));
+                }
             }
         }
     } catch(std::runtime_error &ex) {
