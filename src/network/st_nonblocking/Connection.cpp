@@ -32,8 +32,8 @@ void Connection::DoRead() {
     try {
         int readed_bytes = -1;
         char client_buffer[4096];
-        while ((readed_bytes = read(_socket, client_buffer, sizeof(client_buffer))) > 0) {
-            _logger->warn("Got {} bytes from socket", readed_bytes);
+        if ((readed_bytes = read(_socket, client_buffer, sizeof(client_buffer))) >= 0) {
+            _logger->debug("Got {} bytes from socket", readed_bytes);
 
             // Single block of data readed from the socket could trigger inside actions a multiple times,
             // for example:
@@ -97,10 +97,9 @@ void Connection::DoRead() {
                     parser.Reset();
                 }
             } // while (readed_bytes)
-           {
-                if(errno != EWOULDBLOCK) {
-                    throw std::runtime_error(std::string(strerror(errno)));
-                }
+        } else { // if(read)
+            if(errno != EWOULDBLOCK){
+                _logger->error("Failed to read: {}", errno);
             }
         }
     } catch(std::runtime_error &ex) {
@@ -111,7 +110,7 @@ void Connection::DoRead() {
 
 // See Connection.h
 void Connection::DoWrite() {
-    _logger->warn("Start write on descriptor {}", _socket);
+    _logger->debug("Start write on descriptor {}", _socket);
     while(!write_queue.empty()) {
         const auto token = write_queue.front();
         int n = write(_socket, &token[head_offset], token.size() - head_offset);
