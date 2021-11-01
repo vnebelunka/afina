@@ -3,12 +3,11 @@
 
 #include <thread>
 #include <vector>
+#include <unordered_set>
 
 #include <afina/network/Server.h>
+#include "Connection.h"
 
-namespace spdlog {
-class logger;
-}
 
 namespace Afina {
 namespace Network {
@@ -56,6 +55,9 @@ private:
 
     // IO thread
     std::thread _work_thread;
+
+    std::unordered_set<Connection*> _connections;
+    void close_connection(Connection*);
 };
 
 } // namespace STnonblock

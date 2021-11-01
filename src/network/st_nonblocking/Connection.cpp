@@ -97,9 +97,7 @@ void Connection::DoRead() {
                     parser.Reset();
                 }
             } // while (readed_bytes)
-            if (readed_bytes == 0) {
-                _event.events &= ~EPOLLIN; //TODO возможно неправильно
-            } else {
+           {
                 if(errno != EWOULDBLOCK) {
                     throw std::runtime_error(std::string(strerror(errno)));
                 }
@@ -133,7 +131,6 @@ void Connection::DoWrite() {
         head_offset += n;
     }
     _event.events &= ~ EPOLLOUT;
-    OnClose(); //TODO возможно неправильно
 }
 
 } // namespace STnonblock

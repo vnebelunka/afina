@@ -161,24 +161,22 @@ void ServerImpl::OnRun() {
                 if (epoll_ctl(epoll_descr, EPOLL_CTL_DEL, pc->_socket, &pc->_event)) {
                     _logger->error("Failed to delete connection from epoll");
                 }
+                close_connection(pc);
 
-                close(pc->_socket);
-                pc->OnClose();
-
-                delete pc;
             } else if (pc->_event.events != old_mask) {
                 if (epoll_ctl(epoll_descr, EPOLL_CTL_MOD, pc->_socket, &pc->_event)) {
                     _logger->error("Failed to change connection event mask");
 
-                    close(pc->_socket);
-                    pc->OnClose();
-
-                    delete pc;
+                    close_connection(pc);
                 }
             }
         }
     }
     _logger->warn("Acceptor stopped");
+    for(auto & _connection : _connections) {
+        delete _connection;
+    }
+    _connections.clear();
 }
 
 void ServerImpl::OnNewConnection(int epoll_descr) {
@@ -208,6 +206,9 @@ void ServerImpl::OnNewConnection(int epoll_descr) {
 
         // Register the new FD to be monitored by epoll.
         Connection *pc = new(std::nothrow) Connection(infd,_logger, pStorage);
+
+        _connections.insert(pc);
+
         if (pc == nullptr) {
             throw std::runtime_error("Failed to allocate connection");
         }
@@ -222,6 +223,13 @@ void ServerImpl::OnNewConnection(int epoll_descr) {
         }
     }
 }
+
+void ServerImpl::close_connection(Connection *pc) {
+    close(pc->_socket);
+    _connections.erase(pc);
+    delete pc;
+}
+
 
 } // namespace STnonblock
 } // namespace Network
