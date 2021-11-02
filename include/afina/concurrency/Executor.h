@@ -28,7 +28,16 @@ class Executor {
         kStopped
     };
 
-    Executor(std::string name, int size);
+    Executor(std::string name, size_t low_watermark = 2, size_t high_watermark = 2, size_t max_queue_size = 20, size_t idle_time=100)
+        : name(std::move(name)), low_watermark(low_watermark), high_watermark(high_watermark),
+          max_queue_size(max_queue_size), idle_time(idle_time), working_threads(0){
+        std::unique_lock<std::mutex> lock(mutex); // for ++cur_threads
+        for(int i = 0; i < low_watermark; ++i){
+            std::thread([this] { return perform(this); }).detach();
+            ++cur_threads;
+        }
+        state = State::kRun;
+    }
     ~Executor();
 
     /**
@@ -37,7 +46,19 @@ class Executor {
      *
      * In case if await flag is true, call won't return until all background jobs are done and all threads are stopped
      */
-    void Stop(bool await = false);
+    void Stop(bool await = false){
+        std::unique_lock<std::mutex> lock(mutex);
+        if(await) {
+            state = State::kStopping;
+            while (cur_threads != 0) {
+                stopped_condition.wait(lock);
+            }
+            state = State::kStopped;
+        } else {
+            tasks.clear();
+            state = State::kStopped;
+        }
+    }
 
     /**
      * Add function to be executed on the threadpool. Method returns true in case if task has been placed
@@ -55,10 +76,18 @@ class Executor {
             return false;
         }
 
+        if(tasks.size() >= cur_threads + 1 && cur_threads < high_watermark){
+            std::thread([this] { return perform(this); }).detach();
+            ++cur_threads;
+        }
         // Enqueue new task
-        tasks.push_back(exec);
-        empty_condition.notify_one();
-        return true;
+        if(tasks.size() <= max_queue_size) {
+            tasks.push_back(exec);
+            empty_condition.notify_one();
+            return true;
+        } else {
+            return false;
+        }
     }
 
 private:
@@ -73,6 +102,8 @@ private:
      */
     friend void perform(Executor *executor);
 
+    std::string name;
+
     /**
      * Mutex to protect state below from concurrent modification
      */
@@ -84,9 +115,9 @@ private:
     std::condition_variable empty_condition;
 
     /**
-     * Vector of actual threads that perorm execution
+     * Conditional variable to all workers to stop
      */
-    std::vector<std::thread> threads;
+    std::condition_variable stopped_condition;
 
     /**
      * Task queue
@@ -97,6 +128,20 @@ private:
      * Flag to stop bg threads
      */
     State state;
+
+private: // Parameters
+
+    size_t low_watermark;
+
+    size_t high_watermark;
+
+    size_t working_threads = 0;
+
+    size_t cur_threads = 0;
+
+    size_t max_queue_size;
+
+    size_t idle_time;
 };
 
 } // namespace Concurrency
