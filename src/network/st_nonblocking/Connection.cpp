@@ -10,6 +10,7 @@
 #include <protocol/Parser.h>
 #include <unistd.h>
 #include <memory>
+#include <sys/uio.h>
 
 namespace Afina {
 namespace Network {
@@ -30,9 +31,7 @@ void Connection::OnClose() {
 // See Connection.h
 void Connection::DoRead() {
     try {
-        int readed_bytes = -1;
-        char client_buffer[4096];
-        if ((readed_bytes = read(_socket, client_buffer, sizeof(client_buffer))) >= 0) {
+        if ((readed_bytes = read(_socket, client_buffer + readed_bytes, sizeof(client_buffer)) - readed_bytes) >= 0) {
             _logger->debug("Got {} bytes from socket", readed_bytes);
 
             // Single block of data readed from the socket could trigger inside actions a multiple times,
@@ -88,8 +87,11 @@ void Connection::DoRead() {
 
                     // Send response
                     result += "\r\n";
-                    write_queue.push(result);
-                    _event.events |= EPOLLOUT;
+                    if(write_queue.size() < _max_size){
+                        write_queue.push_back(result);
+                    } else {
+                        _logger->warn("queue is full on descriptor {}", _socket);
+                    }
 
                     // Prepare for the next command
                     command_to_execute.reset();
@@ -101,6 +103,10 @@ void Connection::DoRead() {
             if(errno != EWOULDBLOCK){
                 _logger->error("Failed to read: {}", errno);
             }
+            readed_bytes = 0;
+        }
+        if(!write_queue.empty()){
+            _event.events |= EPOLLOUT;
         }
     } catch(std::runtime_error &ex) {
         _logger->error("Failed to process connection on descriptor {}: {}", _socket, ex.what());
@@ -109,27 +115,42 @@ void Connection::DoRead() {
 }
 
 // See Connection.h
+
 void Connection::DoWrite() {
     _logger->debug("Start write on descriptor {}", _socket);
-    while(!write_queue.empty()) {
-        const auto token = write_queue.front();
-        int n = write(_socket, &token[head_offset], token.size() - head_offset);
-        if(n == -1){
-            if(errno != EWOULDBLOCK){
-                _logger->error("Error writing descriptor {}: {}", _socket, errno);
-                OnError();
-            }
-            _logger->debug("Stop write on descriptor {}", _socket);
-            return;
+    const int iovec_size = 1000;
+    iovec data[iovec_size] = {};
+    int i = 0;
+    {
+        auto it = write_queue.begin();
+        data[i].iov_base = &((*it)[0]) + head_offset;
+        data[i].iov_len = it->size() - head_offset;
+        ++i, ++it;
+        for(; it != write_queue.end() && i < iovec_size; ++it){
+            data[i].iov_base = &((*it)[0]);
+            data[i].iov_len = it->size();
+            ++i;
         }
-        if(n + head_offset == token.size()){
-            head_offset = 0;
-            write_queue.pop();
-            continue;
-        }
-        head_offset += n;
     }
-    _event.events &= ~ EPOLLOUT;
+    int writen = 0;
+    if((writen = writev(_socket, data, i)) > 0) {
+        head_offset += writen;
+        auto it = write_queue.begin();
+        for(; it->size() <= head_offset; ++i){
+            head_offset -= it->size();
+        }
+        write_queue.erase(write_queue.begin(), ++it);
+    }else if(writen == -1){
+        if(errno != EWOULDBLOCK){
+            _logger->error("Error writing descriptor {}: {}", _socket, errno);
+            OnError();
+        }
+        _logger->debug("Stop write on descriptor {}", _socket);
+        return;
+    }
+    if(write_queue.empty()) {
+        _event.events &= ~EPOLLOUT;
+    }
 }
 
 } // namespace STnonblock
