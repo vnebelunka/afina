@@ -26,7 +26,7 @@ void Connection::OnClose() {
 void Connection::DoRead() {
     std::unique_lock<std::mutex> lock(connection_mutex);
     try {
-        while ((readed_bytes = read(_socket, client_buffer + readed_bytes, sizeof(client_buffer))) > 0) { // Edge triggered
+        while ((readed_bytes = read(_socket, client_buffer + readed_bytes, sizeof(client_buffer)) - readed_bytes) > 0) { // Edge triggered
             _logger->warn("Got {} bytes from socket", readed_bytes);
 
             // Single block of data readed from the socket could trigger inside actions a multiple times,
