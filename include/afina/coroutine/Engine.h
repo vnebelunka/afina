@@ -142,13 +142,14 @@ public:
 
         // Start routine execution
         void *pc = run(main, std::forward<Ta>(args)...);
-
+        sched(pc);
         idle_ctx = new context();
+        idle_ctx->Low = StackBottom;
+        cur_routine = idle_ctx;
         if (setjmp(idle_ctx->Environment) > 0) {
             if (alive == nullptr) {
                 _unblocker(*this);
             }
-
             // Here: correct finish of the coroutine section
             yield();
         } else if (pc != nullptr) {
@@ -161,11 +162,12 @@ public:
         this->StackBottom = 0;
     }
 
+
     /**
      * Register new coroutine. It won't receive control until scheduled explicitely or implicitly. In case of some
      * errors function returns -1
      */
-    template <typename... Ta> void *run(void (*func)(Ta...), Ta &&... args) {
+    template <typename... Ta> void *run_impl(char *stack_bottom,void (*func)(Ta...), Ta &&... args) {
         if (this->StackBottom == 0) {
             // Engine wasn't initialized yet
             return nullptr;
@@ -174,12 +176,16 @@ public:
         // New coroutine context that carries around all information enough to call function
         context *pc = new context();
 
+        pc->Low = stack_bottom;
+        char *temp = "123";
         // Store current state right here, i.e just before enter new coroutine, later, once it gets scheduled
         // execution starts here. Note that we have to acquire stack of the current function call to ensure
         // that function parameters will be passed along
         if (setjmp(pc->Environment) > 0) {
             // Created routine got control in order to start execution. Note that all variables, such as
             // context pointer, arguments and a pointer to the function comes from restored stack
+
+            std::cout<<temp<<std::endl;
 
             // invoke routine
             func(std::forward<Ta>(args)...);
@@ -216,7 +222,6 @@ public:
         // it is neccessary to save arguments, pointer to body function, pointer to context, e.t.c - i.e
         // save stack.
         Store(*pc);
-
         // Add routine as alive double-linked list
         pc->next = alive;
         alive = pc;
@@ -226,7 +231,26 @@ public:
 
         return pc;
     }
+
+    template <typename... Ta> void *run(void (*func)(Ta...), Ta &&... args) {
+        char coroutine_start;
+        return run_impl(&coroutine_start, func, std::forward<Ta>(args)...);
+    }
+
+    void print_stack(context &ctx){
+        std::cout<<(char *) &ctx <<": ";
+        auto &stack = std::get<0>(ctx.Stack);
+        auto &old_sz = std::get<1>(ctx.Stack);
+        for(int i = 0; i < old_sz; i++) {
+            std::cout<< stack[i];
+        }
+        std::cout <<std::endl;
+    }
+
 };
+
+
+
 
 } // namespace Coroutine
 } // namespace Afina
