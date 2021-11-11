@@ -13,7 +13,8 @@ namespace Coroutine {
 
 void Engine::Store(context &ctx) {
     char a = 'a';
-    ctx.Hight = &a;
+    char *volatile x = &a;
+    ctx.Hight = x;
 
     size_t store_sz = ctx.Low - ctx.Hight;
     auto &stack = std::get<0>(ctx.Stack);
@@ -23,14 +24,18 @@ void Engine::Store(context &ctx) {
         stack = new char[store_sz];
         old_sz = store_sz;
     }
+    std::cout<<std::hex<<(long long) ctx.Hight<<" "<<(long long) ctx.Low<<std::endl;
     std::memcpy(stack, ctx.Hight, store_sz);
 }
 
 void Engine::Restore(context &ctx) {
     auto &stack = std::get<0>(ctx.Stack);
     auto sz = std::get<1>(ctx.Stack);
-    std::memcpy(ctx.Hight, stack, sz);
-    print_stack(ctx);
+    std::cout<<std::hex<<(long long) ctx.Hight<<" "<<(long long) ctx.Low<<std::endl;
+    for(int i = 0; i < sz; ++i){
+        ctx.Hight[sz - 1 - i] = stack[sz -1 - i];
+    }
+    //std::memcpy(ctx.Hight, stack, sz);
     longjmp(ctx.Environment, 1);
 }
 
