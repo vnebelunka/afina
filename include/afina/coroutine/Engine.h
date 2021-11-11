@@ -142,7 +142,6 @@ public:
 
         // Start routine execution
         void *pc = run(main, std::forward<Ta>(args)...);
-        sched(pc);
         idle_ctx = new context();
         idle_ctx->Low = StackBottom;
         cur_routine = idle_ctx;
@@ -174,10 +173,10 @@ public:
         }
 
         // New coroutine context that carries around all information enough to call function
-        context *pc = new context();
+        auto *pc = new context();
 
         pc->Low = stack_bottom;
-        char *temp = "123";
+        //char *temp = "123";
         // Store current state right here, i.e just before enter new coroutine, later, once it gets scheduled
         // execution starts here. Note that we have to acquire stack of the current function call to ensure
         // that function parameters will be passed along
@@ -185,8 +184,7 @@ public:
             // Created routine got control in order to start execution. Note that all variables, such as
             // context pointer, arguments and a pointer to the function comes from restored stack
 
-            std::cout<<temp<<std::endl;
-
+            std::cout<<std::hex<<(long long) pc->Hight<<" "<<(long long) pc->Low<<std::endl;
             // invoke routine
             func(std::forward<Ta>(args)...);
 
@@ -222,6 +220,7 @@ public:
         // it is neccessary to save arguments, pointer to body function, pointer to context, e.t.c - i.e
         // save stack.
         Store(*pc);
+        std::cout<<std::hex<<(long long) pc->Hight<<" "<<(long long) pc->Low<<std::endl;
         // Add routine as alive double-linked list
         pc->next = alive;
         alive = pc;
@@ -237,12 +236,12 @@ public:
         return run_impl(&coroutine_start, func, std::forward<Ta>(args)...);
     }
 
-    void print_stack(context &ctx){
-        std::cout<<(char *) &ctx <<": ";
+    static void print_stack(context &ctx){
+        std::cout<<std::hex<< (long long) &ctx.Hight<<" "<< (long long) &ctx.Low <<": ";
         auto &stack = std::get<0>(ctx.Stack);
         auto &old_sz = std::get<1>(ctx.Stack);
         for(int i = 0; i < old_sz; i++) {
-            std::cout<< stack[i];
+            std::cout<< (char) stack[i];
         }
         std::cout <<std::endl;
     }
