@@ -87,10 +87,10 @@ void Connection::DoRead() {
 
                     // Send response
                     result += "\r\n";
-                    if(write_queue.size() < _max_size){
-                        write_queue.push_back(result);
-                    } else {
-                        _logger->warn("queue is full on descriptor {}", _socket);
+                    write_queue.push_back(result);
+                    if(write_queue.size() > watermark){
+                        _logger->debug("watermark passed on descriptor {}");
+                        _event.events &= ~EPOLLIN;
                     }
 
                     // Prepare for the next command
@@ -118,7 +118,7 @@ void Connection::DoRead() {
 
 void Connection::DoWrite() {
     _logger->debug("Start write on descriptor {}", _socket);
-    const int iovec_size = 1000;
+    const int iovec_size = 64;
     iovec data[iovec_size] = {};
     int i = 0;
     {
@@ -150,6 +150,9 @@ void Connection::DoWrite() {
     }
     if(write_queue.empty()) {
         _event.events &= ~EPOLLOUT;
+    }
+    if (write_queue.size() < watermark){
+        _event.events |= EPOLLIN;
     }
 }
 
