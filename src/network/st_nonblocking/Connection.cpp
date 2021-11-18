@@ -89,7 +89,7 @@ void Connection::DoRead() {
                     result += "\r\n";
                     write_queue.push_back(result);
                     if(write_queue.size() > watermark){
-                        _logger->debug("watermark passed on descriptor {}");
+                        _logger->debug("watermark passed on descriptor {}", _socket);
                         _event.events &= ~EPOLLIN;
                     }
 
