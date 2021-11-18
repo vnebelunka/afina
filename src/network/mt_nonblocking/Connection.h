@@ -28,7 +28,7 @@ namespace MTnonblock {
 class Connection {
 public:
     Connection(int s, std::shared_ptr<spdlog::logger> my_logger, std::shared_ptr<Afina::Storage> my_pstorage, int queue_size = 1000)
-        : _socket(s), queue_size(queue_size){
+        : _socket(s), watermark(queue_size){
         std::memset(&_event, 0, sizeof(struct epoll_event));
         _event.data.ptr = this;
         _logger = my_logger;
@@ -60,7 +60,7 @@ private:
     struct epoll_event _event;
 
     std::deque<std::string> write_queue;
-    const int queue_size = 1000;
+    const int watermark = 1000;
     std::mutex connection_mutex;
     size_t head_offset = 0;
 
