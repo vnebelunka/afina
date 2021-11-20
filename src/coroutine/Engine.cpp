@@ -37,11 +37,15 @@ void Engine::Restore(context &ctx) {
 
 void Engine::yield() {
     if(alive != nullptr){
-        if(cur_routine != nullptr) {
-            Store(*cur_routine);
+        if(alive == cur_routine){
+            if(alive->next) {
+                sched(alive->next);
+            } else {
+                return;
+            }
+        } else {
+            sched(alive);
         }
-        cur_routine = (context *) alive;
-        Restore(*alive);
     }
 }
 
@@ -50,17 +54,12 @@ void Engine::sched(void *routine_) {
         yield();
     } else {
         context *ctx = (context *)routine_;
-        if(cur_routine != idle_ctx) { // No need to jump here if its idle_ctx
+        if(cur_routine && cur_routine != routine_) { // No need to save again
             if (setjmp(cur_routine->Environment) > 0) {
-                if (cur_routine != nullptr) { // if coroutine wasn't ended
-                    return;
-                } else { // coroutine ended: returning to idle_ctx
-                    cur_routine = idle_ctx;
-                    Restore(*ctx);
-                }
+                return;
             }
+            Store(*cur_routine);
         }
-        Store(*cur_routine);
         cur_routine = ctx;
         Restore(*ctx);
     }

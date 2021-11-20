@@ -144,7 +144,7 @@ public:
         void *pc = run(main, std::forward<Ta>(args)...);
         idle_ctx = new context();
         idle_ctx->Low = StackBottom;
-        cur_routine = idle_ctx;
+        //cur_routine = idle_ctx;
         if (setjmp(idle_ctx->Environment) > 0) {
             if (alive == nullptr) {
                 _unblocker(*this);
@@ -153,6 +153,7 @@ public:
             yield();
         } else if (pc != nullptr) {
             Store(*idle_ctx);
+            cur_routine = (context *) pc;
             sched(pc);
         }
 
