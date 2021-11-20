@@ -102,6 +102,7 @@ void Connection::DoRead() {
         } else { // if(read)
             if(errno != EWOULDBLOCK){
                 _logger->error("Failed to read: {}", errno);
+                OnError();
             }
             readed_bytes = 0;
         }
@@ -125,21 +126,19 @@ void Connection::DoWrite() {
         auto it = write_queue.begin();
         data[i].iov_base = &((*it)[0]) + head_offset;
         data[i].iov_len = it->size() - head_offset;
-        ++i, ++it;
-        for(; it != write_queue.end() && i < iovec_size; ++it){
+        for(++i, ++it; it != write_queue.end() && i < iovec_size; ++it, ++i){
             data[i].iov_base = &((*it)[0]);
             data[i].iov_len = it->size();
-            ++i;
         }
     }
     int writen = 0;
     if((writen = writev(_socket, data, i)) > 0) {
         head_offset += writen;
         auto it = write_queue.begin();
-        for(; it->size() <= head_offset; ++i){
+        for(; it->size() <= head_offset; ++it){
             head_offset -= it->size();
         }
-        write_queue.erase(write_queue.begin(), ++it);
+        write_queue.erase(write_queue.begin(), it);
     }else if(writen == -1){
         if(errno != EWOULDBLOCK){
             _logger->error("Error writing descriptor {}: {}", _socket, errno);
@@ -151,7 +150,7 @@ void Connection::DoWrite() {
     if(write_queue.empty()) {
         _event.events &= ~EPOLLOUT;
     }
-    if (write_queue.size() < watermark){
+    if (write_queue.size() < watermark / 2){
         _event.events |= EPOLLIN;
     }
 }
