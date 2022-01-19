@@ -74,6 +74,9 @@ private:
      */
     unblocker_func _unblocker;
 
+    /* inner func to swap routine */
+    void change_routine(context *ctx);
+
 protected:
     /**
      * Save stack of the current coroutine in the given context
@@ -143,17 +146,17 @@ public:
         // Start routine execution
         void *pc = run(main, std::forward<Ta>(args)...);
         idle_ctx = new context();
-        idle_ctx->Low = StackBottom;
-        //cur_routine = idle_ctx;
+        idle_ctx->Hight = StackBottom;
         if (setjmp(idle_ctx->Environment) > 0) {
             if (alive == nullptr) {
                 _unblocker(*this);
             }
             // Here: correct finish of the coroutine section
+            cur_routine = idle_ctx;
             yield();
         } else if (pc != nullptr) {
             Store(*idle_ctx);
-            cur_routine = (context *) pc;
+            cur_routine = idle_ctx;
             sched(pc);
         }
 
@@ -176,7 +179,7 @@ public:
         // New coroutine context that carries around all information enough to call function
         auto *pc = new context();
 
-        pc->Low = stack_bottom;
+        pc->Hight = stack_bottom;
         // Store current state right here, i.e just before enter new coroutine, later, once it gets scheduled
         // execution starts here. Note that we have to acquire stack of the current function call to ensure
         // that function parameters will be passed along
