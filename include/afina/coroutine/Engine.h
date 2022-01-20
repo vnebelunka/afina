@@ -74,6 +74,9 @@ private:
      */
     unblocker_func _unblocker;
 
+    /* inner func to swap routine */
+    void change_routine(context *ctx);
+
 protected:
     /**
      * Save stack of the current coroutine in the given context
@@ -142,17 +145,18 @@ public:
 
         // Start routine execution
         void *pc = run(main, std::forward<Ta>(args)...);
-
         idle_ctx = new context();
+        idle_ctx->Hight = StackBottom;
         if (setjmp(idle_ctx->Environment) > 0) {
             if (alive == nullptr) {
                 _unblocker(*this);
             }
-
             // Here: correct finish of the coroutine section
+            cur_routine = idle_ctx;
             yield();
         } else if (pc != nullptr) {
             Store(*idle_ctx);
+            cur_routine = idle_ctx;
             sched(pc);
         }
 
@@ -161,19 +165,21 @@ public:
         this->StackBottom = 0;
     }
 
+
     /**
      * Register new coroutine. It won't receive control until scheduled explicitely or implicitly. In case of some
      * errors function returns -1
      */
-    template <typename... Ta> void *run(void (*func)(Ta...), Ta &&... args) {
+    template <typename... Ta> void *run_impl(char *stack_bottom,void (*func)(Ta...), Ta &&... args) {
         if (this->StackBottom == 0) {
             // Engine wasn't initialized yet
             return nullptr;
         }
 
         // New coroutine context that carries around all information enough to call function
-        context *pc = new context();
+        auto *pc = new context();
 
+        pc->Hight = stack_bottom;
         // Store current state right here, i.e just before enter new coroutine, later, once it gets scheduled
         // execution starts here. Note that we have to acquire stack of the current function call to ensure
         // that function parameters will be passed along
@@ -216,8 +222,6 @@ public:
         // it is neccessary to save arguments, pointer to body function, pointer to context, e.t.c - i.e
         // save stack.
         Store(*pc);
-
-        // Add routine as alive double-linked list
         pc->next = alive;
         alive = pc;
         if (pc->next != nullptr) {
@@ -226,7 +230,16 @@ public:
 
         return pc;
     }
+
+    template <typename... Ta> void *run(void (*func)(Ta...), Ta &&... args) {
+        char coroutine_start;
+        char *volatile x = &coroutine_start;
+        return run_impl(x, func, std::forward<Ta>(args)...);
+    }
 };
+
+
+
 
 } // namespace Coroutine
 } // namespace Afina
